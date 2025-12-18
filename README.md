@@ -14,10 +14,12 @@
 2. [Usage](#usage)
    - [Using Local Docker Daemon](#using-local-docker-daemon)
    - [Using Remote Docker via SSH](#using-remote-docker-via-ssh)
-3. [Demo](#demo)
-4. [Roadmap](#roadmap)
-5. [License](#license)
-6. [Contact](#contact)
+3. [Creating Challenges](#creating-challenges)
+   - [SSH Challenges](#ssh-challenges)
+4. [Demo](#demo)
+5. [Roadmap](#roadmap)
+6. [License](#license)
+7. [Contact](#contact)
 
 ---
 
@@ -134,6 +136,112 @@ For remote Docker, the CTFd host must have SSH access to the remote server.
 
 ---
 
+## Creating Challenges
+
+### SSH Challenges
+
+SSH challenges allow participants to connect to containerized environments via SSH. Here's how to set them up:
+
+#### 1. **Prepare Your Docker Image**
+
+Your Docker image needs to have an SSH server configured. Here's an example Dockerfile:
+
+```dockerfile
+FROM ubuntu:22.04
+
+# Install OpenSSH server
+RUN apt-get update && \
+    apt-get install -y openssh-server && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create SSH directory
+RUN mkdir /var/run/sshd
+
+# Set up a user (you can customize this)
+RUN useradd -m -s /bin/bash ctfuser && \
+    echo 'ctfuser:ctfpassword' | chpasswd
+
+# Optional: Allow root login or configure SSH settings
+RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+
+# SSH login fix (otherwise user is kicked off after login)
+RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+
+# Expose SSH port
+EXPOSE 22
+
+# Start SSH service
+CMD ["/usr/sbin/sshd", "-D"]
+```
+
+#### 2. **Build and Push Your Image**
+
+```bash
+docker build -t your-ssh-challenge:latest .
+docker tag your-ssh-challenge:latest your-registry/your-ssh-challenge:latest
+docker push your-registry/your-ssh-challenge:latest
+```
+
+Or ensure the image is available on the Docker host where challenges will run.
+
+#### 3. **Create Challenge in CTFd**
+
+1. Go to Admin Panel → Challenges → Create Challenge
+2. Select "Container" as the challenge type
+3. Fill in the challenge details:
+   - **Name**: Your challenge name
+   - **Image**: Select your SSH-enabled Docker image
+   - **Connection Type**: Select "SSH"
+   - **Port**: 22 (the SSH port inside the container)
+   - **Initial Value**, **Decay**, **Minimum**: Set point values
+   - **Flag Mode**: Choose "Static" or "Random"
+     - For SSH challenges, you can inject the flag via environment variable `$FLAG`
+     - Example: Place flag in a file during container startup
+
+4. In your challenge description, provide:
+   - SSH credentials (username/password)
+   - Instructions on what to find
+   - Any necessary hints
+
+#### 4. **Example: Flag Injection**
+
+Modify your Dockerfile to use the FLAG environment variable:
+
+```dockerfile
+# Add this to your Dockerfile
+RUN echo '#!/bin/bash\necho "Flag: $FLAG" > /home/ctfuser/flag.txt' > /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
+# Change CMD to use entrypoint
+CMD ["/bin/bash", "-c", "/entrypoint.sh && /usr/sbin/sshd -D"]
+```
+
+#### 5. **Security Considerations**
+
+- Use non-root users when possible
+- Consider using key-based authentication for more realistic scenarios
+- Set resource limits (memory, CPU) in the plugin settings
+- Remember that participants will have shell access - ensure proper isolation
+
+#### 6. **Example SSH Challenge**
+
+A complete working example is available in the `examples/ssh-challenge/` directory. This example demonstrates:
+- Basic SSH server setup
+- Flag injection via environment variable
+- User authentication configuration
+
+To use the example:
+```bash
+cd examples/ssh-challenge
+docker build -t ssh-challenge:latest .
+```
+
+See the [SSH Challenge Example README](./examples/ssh-challenge/README.md) for more details.
+
+[Back to top](#ctfd-docker-containers-plugin)
+
+---
+
 ## Demo
 
 ### Admin Dashboard
@@ -144,11 +252,16 @@ For remote Docker, the CTFd host must have SSH access to the remote server.
 
 ### Challenge View
 
-**Web Access** | **TCP Access**
-:-------------:|:-------------:
-![Web](./image-readme/http.png) | ![TCP](./image-readme/tcp.png)
+**Web Access** | **TCP Access** | **SSH Access**
+:-------------:|:--------------:|:-------------:
+![Web](./image-readme/http.png) | ![TCP](./image-readme/tcp.png) | SSH connection via terminal
 
-### Live Demo
+**Connection Types:**
+- **Web**: HTTP-based challenges accessible through a browser
+- **TCP**: Raw TCP connections using netcat or similar tools
+- **SSH**: Secure shell access to containerized environments
+
+[Back to top](#ctfd-docker-containers-plugin)
 
 ![Live Demo](./image-readme/demo.gif)
 

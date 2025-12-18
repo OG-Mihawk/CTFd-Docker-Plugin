@@ -80,6 +80,14 @@ function createChallengeLinkElement(data, parent) {
         let codeElement = document.createElement('code');
         codeElement.textContent = 'nc ' + data.hostname + " " + data.port;
         parent.append(codeElement);
+    } else if (data.connect == "ssh") {
+        let codeElement = document.createElement('code');
+        codeElement.textContent = 'ssh user@' + data.hostname + ' -p ' + data.port;
+        parent.append(codeElement);
+        let note = document.createElement('div');
+        note.className = 'text-muted mt-2';
+        note.innerHTML = '<small>Note: Use the credentials provided in the challenge description or connect to discover them.</small>';
+        parent.append(note);
     } else {
         let link = document.createElement('a');
         link.href = 'http://' + data.hostname + ":" + data.port;
